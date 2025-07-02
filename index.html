@@ -3,313 +3,425 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Análise Histórica de Uso de Impressoras</title>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet" />
+  <title>Estudo Histórico de Uso das Impressoras</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
   <style>
+    * {
+      box-sizing: border-box;
+    }
     body {
       font-family: 'Poppins', sans-serif;
-      background: #f9f9f9;
-      margin: 20px;
+      background: #f5f5f5;
+      padding: 20px;
       color: #333;
     }
-    h1, h2 {
+    header {
       text-align: center;
-      color: #004aad;
+      margin-bottom: 40px;
+    }
+    header h1 {
+      color: #007BFF;
     }
     section {
-      max-width: 1000px;
+      max-width: 1100px;
       margin: 0 auto 40px;
       background: #fff;
+      padding: 30px;
       border-radius: 12px;
-      padding: 20px 30px;
-      box-shadow: 0 3px 10px rgb(0 0 0 / 0.1);
+      box-shadow: 0 0 12px rgba(0, 0, 0, 0.1);
     }
-    input[type=file], button {
-      display: block;
-      margin: 15px auto;
-      padding: 12px 20px;
+    input[type="file"], select, button {
+      margin: 10px 5px 20px 0;
+      padding: 8px 12px;
       border-radius: 6px;
       border: 1px solid #ccc;
       font-size: 1rem;
-      cursor: pointer;
     }
     button {
-      background-color: #004aad;
+      background: #007BFF;
       color: white;
       border: none;
-      transition: background-color 0.3s ease;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.3s ease;
     }
     button:hover {
-      background-color: #002f6c;
+      background: #0056b3;
     }
-    #summary {
+    table {
+      width: 100%;
+      border-collapse: collapse;
       margin-top: 20px;
+      font-size: 0.9rem;
+    }
+    th, td {
+      padding: 8px 12px;
+      border-bottom: 1px solid #ccc;
+      text-align: center;
+      white-space: nowrap;
+    }
+    th {
+      background: #007BFF;
+      color: white;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    #resumo, #filtros {
+      margin-top: 10px;
       padding: 15px;
-      background: #e6f0ff;
-      border-radius: 8px;
-      font-size: 1rem;
-      line-height: 1.4;
-      white-space: pre-wrap;
+      background: #e9f7ef;
+      border-left: 6px solid #28a745;
+      font-weight: 600;
     }
     canvas {
-      margin-top: 30px;
+      margin-top: 40px;
       max-width: 100%;
     }
-    label {
-      text-align: center;
-      display: block;
-      font-weight: 600;
-      margin-top: 10px;
-      color: #004aad;
+    #graficos {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 30px;
+      justify-content: space-around;
     }
-    select {
-      margin: 0 auto 20px;
-      display: block;
-      padding: 6px 12px;
-      font-size: 1rem;
-      border-radius: 6px;
-      border: 1px solid #ccc;
-      width: 240px;
-      text-align: center;
+    #graficos canvas {
+      flex: 1 1 300px;
+      max-width: 600px;
     }
   </style>
 </head>
 <body>
+  <header>
+    <h1>Estudo Histórico de Uso das Impressoras</h1>
+    <p>Envie o arquivo CSV com dados históricos para análise completa</p>
+  </header>
 
   <section>
-    <h1>Análise Histórica de Uso de Impressoras</h1>
-    <label for="csvFile">Selecione o arquivo CSV com dados diários</label>
     <input type="file" id="csvFile" accept=".csv" />
-    <button id="analyzeBtn">Analisar</button>
+    <button onclick="processarDados()">Analisar Dados</button>
 
-    <label for="filterSetor">Filtrar por Setor:</label>
-    <select id="filterSetor" disabled>
-      <option value="">Todos</option>
-    </select>
+    <div id="filtros" style="display:none;">
+      <label for="setorSelect">Filtrar Setor:</label>
+      <select id="setorSelect"><option value="todos">Todos</option></select>
+      <label for="dataInicio">Data Início:</label>
+      <input type="date" id="dataInicio" />
+      <label for="dataFim">Data Fim:</label>
+      <input type="date" id="dataFim" />
+      <button onclick="filtrarDados()">Aplicar Filtro</button>
+    </div>
 
-    <label for="filterImpressora">Filtrar por Impressora (Serial Number):</label>
-    <select id="filterImpressora" disabled>
-      <option value="">Todas</option>
-    </select>
+    <div id="resumo"></div>
 
-    <div id="summary"></div>
+    <div id="tabelaResumoContainer"></div>
 
-    <canvas id="chartImpressoes" height="150"></canvas>
-    <canvas id="chartToner" height="150"></canvas>
+    <div id="graficos">
+      <canvas id="graficoToner"></canvas>
+      <canvas id="graficoImpressao"></canvas>
+      <canvas id="graficoVariacao"></canvas>
+    </div>
   </section>
 
 <script>
-  const csvInput = document.getElementById('csvFile');
-  const analyzeBtn = document.getElementById('analyzeBtn');
-  const filterSetor = document.getElementById('filterSetor');
-  const filterImpressora = document.getElementById('filterImpressora');
-  const summaryDiv = document.getElementById('summary');
-  const ctxImpressoes = document.getElementById('chartImpressoes').getContext('2d');
-  const ctxToner = document.getElementById('chartToner').getContext('2d');
+  let dadosOriginais = [];
+  let dadosFiltrados = [];
+  let chartToner, chartImpressao, chartVariacao;
 
-  let rawData = [];
-  let chartImpressoes, chartToner;
-
-  function parsePercentToNumber(str) {
-    if (!str) return 0;
-    return Number(str.toString().replace('%','').trim()) || 0;
-  }
-
-  function dateToISO(dateStr) {
-    // Suporta dd/mm/yyyy ou dd-mm-yyyy
-    const parts = dateStr.split(/[\/\-]/);
-    if(parts.length !== 3) return null;
-    return new Date(parts[2], parts[1]-1, parts[0]).toISOString().slice(0,10);
-  }
-
-  function getUniqueValues(arr, key) {
-    return [...new Set(arr.map(x => x[key]).filter(x => x))].sort();
-  }
-
-  function filterData(data, setor, impressora) {
-    return data.filter(d => {
-      return (setor ? d['Setor'] === setor : true) && (impressora ? d['Serial Number'] === impressora : true);
-    });
-  }
-
-  function aggregateByDate(data) {
-    // soma impressões por data
-    const agg = {};
-    data.forEach(d => {
-      const date = dateToISO(d['DATA']);
-      if (!date) return;
-      const mono = Number(d['Mono Lifetime Count']) || 0;
-      const color = Number(d['Color Lifetime Count']) || 0;
-      const impressoes = mono + color;
-      if(!agg[date]) agg[date] = 0;
-      agg[date] += impressoes;
-    });
-    return agg;
-  }
-
-  function aggregateTonerByDate(data) {
-    const agg = {};
-    data.forEach(d => {
-      const date = dateToISO(d['DATA']);
-      if (!date) return;
-      const toner = parsePercentToNumber(d['TONER']);
-      if(!agg[date]) agg[date] = [];
-      agg[date].push(toner);
-    });
-    // calcular média toner por dia
-    const avgToner = {};
-    Object.keys(agg).forEach(date => {
-      const arr = agg[date];
-      const avg = arr.reduce((a,b) => a+b,0) / arr.length;
-      avgToner[date] = avg;
-    });
-    return avgToner;
-  }
-
-  function updateFilters(data) {
-    const setores = getUniqueValues(data, 'Setor');
-    filterSetor.innerHTML = '<option value="">Todos</option>' + setores.map(s => `<option value="${s}">${s}</option>`).join('');
-    filterSetor.disabled = false;
-
-    const impressoras = getUniqueValues(data, 'Serial Number');
-    filterImpressora.innerHTML = '<option value="">Todas</option>' + impressoras.map(s => `<option value="${s}">${s}</option>`).join('');
-    filterImpressora.disabled = false;
-  }
-
-  function generateSummary(data) {
-    const impressoras = getUniqueValues(data, 'Serial Number');
-    const totalImpressoes = data.reduce((acc, d) => {
-      const mono = Number(d['Mono Lifetime Count']) || 0;
-      const color = Number(d['Color Lifetime Count']) || 0;
-      return acc + mono + color;
-    }, 0);
-
-    const mediaImpressoes = (totalImpressoes / impressoras.length) || 0;
-
-    // Toner abaixo de 20%
-    const tonerBaixoCount = data.filter(d => parsePercentToNumber(d['TONER']) < 20).length;
-
-    return `
-Impressoras analisadas: ${impressoras.length}
-Total de impressões: ${totalImpressoes.toLocaleString('pt-BR')}
-Média por impressora: ${mediaImpressoes.toFixed(2)}
-Impressoras com toner abaixo de 20%: ${tonerBaixoCount}
-`;
-  }
-
-  function renderCharts(data) {
-    const agregImpressoes = aggregateByDate(data);
-    const agregToner = aggregateTonerByDate(data);
-
-    const labels = Object.keys(agregImpressoes).sort();
-    const valuesImpressoes = labels.map(d => agregImpressoes[d]);
-    const valuesToner = labels.map(d => agregToner[d] || 0);
-
-    if(chartImpressoes) chartImpressoes.destroy();
-    chartImpressoes = new Chart(ctxImpressoes, {
-      type: 'line',
-      data: {
-        labels,
-        datasets: [{
-          label: 'Total Impressões (Mono + Color)',
-          data: valuesImpressoes,
-          borderColor: '#004aad',
-          backgroundColor: 'rgba(0, 74, 173, 0.2)',
-          fill: true,
-          tension: 0.3,
-          pointRadius: 3
-        }]
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: { display: true },
-          title: { display: true, text: 'Tendência de Impressões Diárias' }
-        },
-        scales: {
-          y: { beginAtZero: true },
-          x: {
-            type: 'time',
-            time: {
-              unit: 'day',
-              tooltipFormat: 'dd/MM/yyyy',
-              displayFormats: { day: 'dd/MM/yyyy' }
-            }
-          }
-        }
-      }
-    });
-
-    if(chartToner) chartToner.destroy();
-    chartToner = new Chart(ctxToner, {
-      type: 'line',
-      data: {
-        labels,
-        datasets: [{
-          label: 'Média de TONER (%)',
-          data: valuesToner,
-          borderColor: '#28a745',
-          backgroundColor: 'rgba(40, 167, 69, 0.2)',
-          fill: true,
-          tension: 0.3,
-          pointRadius: 3
-        }]
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: { display: true },
-          title: { display: true, text: 'Tendência de Toner Médio Diário' }
-        },
-        scales: {
-          y: {
-            beginAtZero: true,
-            max: 100
-          },
-          x: {
-            type: 'time',
-            time: {
-              unit: 'day',
-              tooltipFormat: 'dd/MM/yyyy',
-              displayFormats: { day: 'dd/MM/yyyy' }
-            }
-          }
-        }
-      }
-    });
-  }
-
-  function onFilterChange() {
-    const setor = filterSetor.value;
-    const impressora = filterImpressora.value;
-    const filtered = filterData(rawData, setor, impressora);
-    summaryDiv.textContent = generateSummary(filtered);
-    renderCharts(filtered);
-  }
-
-  analyzeBtn.addEventListener('click', () => {
-    const file = csvInput.files[0];
+  function processarDados() {
+    const file = document.getElementById('csvFile').files[0];
     if (!file) {
-      alert('Por favor selecione um arquivo CSV');
+      alert('Por favor, selecione um arquivo CSV.');
       return;
     }
 
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      complete: (results) => {
-        rawData = results.data;
-        updateFilters(rawData);
-        onFilterChange();
-      },
-      error: () => alert('Erro ao ler arquivo CSV')
-    });
-  });
+      complete: function(results) {
+        dadosOriginais = results.data.map(linha => {
+          // Normaliza e parseia dados importantes:
+          return {
+            data: linha['DATA'],
+            setor: linha['Setor'],
+            toner: parsePercent(linha['TONER']),
+            magenta: parsePercent(linha['Magenta (%)']),
+            yellow: parsePercent(linha['Yellow (%)']),
+            cyan: parsePercent(linha['Cyan (%)']),
+            fotocondutor: parsePercent(linha['FOTOCONDUTOR']),
+            fusor: parsePercent(linha['FUSOR']),
+            monoCount: parseInt(linha['Mono Lifetime Count']) || 0,
+            colorCount: parseInt(linha['Color Lifetime Count']) || 0,
+            diferencaDiaria: parseInt(linha['Diferencia diaria']) || 0,
+          };
+        });
 
-  filterSetor.addEventListener('change', onFilterChange);
-  filterImpressora.addEventListener('change', onFilterChange);
+        // Preenche filtros de setor e datas
+        populaFiltros();
+        document.getElementById('filtros').style.display = 'block';
+
+        // Aplica filtro inicial sem restrição (todos)
+        dadosFiltrados = [...dadosOriginais];
+        atualizarAnalises();
+      }
+    });
+  }
+
+  function parsePercent(valor) {
+    if (!valor) return null;
+    if (typeof valor === 'string' && valor.trim().endsWith('%')) {
+      return Number(valor.trim().replace('%',''));
+    }
+    const n = Number(valor);
+    return isNaN(n) ? null : n;
+  }
+
+  function populaFiltros() {
+    const setorSelect = document.getElementById('setorSelect');
+    setorSelect.innerHTML = '<option value="todos">Todos</option>';
+    const setoresUnicos = [...new Set(dadosOriginais.map(d => d.setor))].sort();
+    setoresUnicos.forEach(s => {
+      setorSelect.innerHTML += `<option value="${s}">${s}</option>`;
+    });
+
+    const datas = dadosOriginais.map(d => d.data).filter(d => !!d);
+    const minData = datas.reduce((a,b) => a < b ? a : b);
+    const maxData = datas.reduce((a,b) => a > b ? a : b);
+
+    document.getElementById('dataInicio').value = minData;
+    document.getElementById('dataFim').value = maxData;
+  }
+
+  function filtrarDados() {
+    const setor = document.getElementById('setorSelect').value;
+    const dataInicio = document.getElementById('dataInicio').value;
+    const dataFim = document.getElementById('dataFim').value;
+
+    dadosFiltrados = dadosOriginais.filter(d => {
+      let condSetor = setor === 'todos' || d.setor === setor;
+      let condData = true;
+      if(dataInicio) condData = condData && d.data >= dataInicio;
+      if(dataFim) condData = condData && d.data <= dataFim;
+      return condSetor && condData;
+    });
+
+    atualizarAnalises();
+  }
+
+  function atualizarAnalises() {
+    gerarResumo();
+    gerarTabelaResumo();
+    gerarGraficos();
+  }
+
+  function gerarResumo() {
+    const totalRegistros = dadosFiltrados.length;
+    const setores = [...new Set(dadosFiltrados.map(d => d.setor))];
+    const dataInicio = dadosFiltrados.reduce((a,b) => !a || a > b.data ? b.data : a, null);
+    const dataFim = dadosFiltrados.reduce((a,b) => !a || a < b.data ? b.data : a, null);
+
+    document.getElementById('resumo').innerHTML = `
+      <strong>Registros analisados:</strong> ${totalRegistros} <br/>
+      <strong>Setores únicos:</strong> ${setores.length} <br/>
+      <strong>Período:</strong> ${dataInicio} até ${dataFim}
+    `;
+  }
+
+  function gerarTabelaResumo() {
+    // Agrupa por setor e calcula médias e totais
+    const resumoSetor = {};
+    dadosFiltrados.forEach(d => {
+      if (!resumoSetor[d.setor]) {
+        resumoSetor[d.setor] = {
+          totalMono: 0,
+          totalColor: 0,
+          totalDiferenca: 0,
+          somaToner: 0,
+          qtdToner: 0,
+          somaFusor: 0,
+          qtdFusor: 0,
+          somaFotocondutor: 0,
+          qtdFotocondutor: 0,
+          count: 0
+        };
+      }
+      const r = resumoSetor[d.setor];
+      r.totalMono += d.monoCount;
+      r.totalColor += d.colorCount;
+      r.totalDiferenca += d.diferencaDiaria;
+      if (d.toner !== null) { r.somaToner += d.toner; r.qtdToner++; }
+      if (d.fusor !== null) { r.somaFusor += d.fusor; r.qtdFusor++; }
+      if (d.fotocondutor !== null) { r.somaFotocondutor += d.fotocondutor; r.qtdFotocondutor++; }
+      r.count++;
+    });
+
+    let html = `<table>
+      <thead>
+        <tr>
+          <th>Setor</th>
+          <th>Impressões Mono (Total)</th>
+          <th>Impressões Color (Total)</th>
+          <th>Consumo Médio Toner (%)</th>
+          <th>Consumo Médio Fusor (%)</th>
+          <th>Consumo Médio Fotocondutor (%)</th>
+          <th>Variação Diária Total</th>
+          <th>Dias Contabilizados</th>
+        </tr>
+      </thead><tbody>`;
+
+    for (const setor in resumoSetor) {
+      const r = resumoSetor[setor];
+      html += `<tr>
+        <td>${setor}</td>
+        <td>${r.totalMono}</td>
+        <td>${r.totalColor}</td>
+        <td>${(r.qtdToner ? (r.somaToner / r.qtdToner).toFixed(2) : 'N/A')}</td>
+        <td>${(r.qtdFusor ? (r.somaFusor / r.qtdFusor).toFixed(2) : 'N/A')}</td>
+        <td>${(r.qtdFotocondutor ? (r.somaFotocondutor / r.qtdFotocondutor).toFixed(2) : 'N/A')}</td>
+        <td>${r.totalDiferenca}</td>
+        <td>${r.count}</td>
+      </tr>`;
+    }
+    html += `</tbody></table>`;
+
+    document.getElementById('tabelaResumoContainer').innerHTML = html;
+  }
+
+  function gerarGraficos() {
+    const ctxToner = document.getElementById('graficoToner').getContext('2d');
+    const ctxImpressao = document.getElementById('graficoImpressao').getContext('2d');
+    const ctxVariacao = document.getElementById('graficoVariacao').getContext('2d');
+
+    // Agrupa dados para gráficos: média de toner e total impressões por setor por data
+    const dadosPorDataSetor = {};
+    dadosFiltrados.forEach(d => {
+      const chave = d.data + '|' + d.setor;
+      if (!dadosPorDataSetor[chave]) {
+        dadosPorDataSetor[chave] = {
+          data: d.data,
+          setor: d.setor,
+          toner: [],
+          mono: 0,
+          color: 0,
+          diferenca: 0
+        };
+      }
+      dadosPorDataSetor[chave].toner.push(d.toner);
+      dadosPorDataSetor[chave].mono += d.monoCount;
+      dadosPorDataSetor[chave].color += d.colorCount;
+      dadosPorDataSetor[chave].diferenca += d.diferencaDiaria;
+    });
+
+    // Para simplificar, escolher 3 setores com mais registros para plotar
+    const setoresCount = {};
+    for(const key in dadosPorDataSetor) {
+      const s = dadosPorDataSetor[key].setor;
+      setoresCount[s] = (setoresCount[s] || 0) + 1;
+    }
+    const setoresTop = Object.entries(setoresCount).sort((a,b)=>b[1]-a[1]).slice(0,3).map(e => e[0]);
+
+    // Organiza dados para gráfico toner
+    const labelsDatas = [...new Set(dadosFiltrados.map(d=>d.data))].sort();
+    const datasetsToner = setoresTop.map(setor => {
+      return {
+        label: setor,
+        data: labelsDatas.map(data => {
+          // calcular média toner para setor/data
+          const d = dadosFiltrados.filter(x => x.data === data && x.setor === setor && x.toner !== null);
+          if(d.length === 0) return null;
+          return d.reduce((sum,v) => sum + v.toner,0)/d.length;
+        }),
+        borderColor: randomColor(),
+        fill: false,
+        tension: 0.3,
+        spanGaps: true
+      };
+    });
+
+    if(chartToner) chartToner.destroy();
+    chartToner = new Chart(ctxToner, {
+      type: 'line',
+      data: {
+        labels: labelsDatas,
+        datasets: datasetsToner
+      },
+      options: {
+        responsive:true,
+        plugins: {legend: {position: 'top'}, title: {display: true, text: 'Consumo Médio Toner (%) por Setor'}},
+        scales: {
+          y: {beginAtZero: true, max: 100}
+        }
+      }
+    });
+
+    // Organiza dados para gráfico de impressões totais
+    const datasetsImpressao = setoresTop.map(setor => {
+      return {
+        label: setor,
+        data: labelsDatas.map(data => {
+          const d = dadosFiltrados.filter(x => x.data === data && x.setor === setor);
+          if(d.length === 0) return 0;
+          return d.reduce((sum,v) => sum + v.monoCount + v.colorCount, 0);
+        }),
+        borderColor: randomColor(),
+        fill: false,
+        tension: 0.3,
+        spanGaps: true
+      };
+    });
+    if(chartImpressao) chartImpressao.destroy();
+    chartImpressao = new Chart(ctxImpressao, {
+      type: 'line',
+      data: {
+        labels: labelsDatas,
+        datasets: datasetsImpressao
+      },
+      options: {
+        responsive:true,
+        plugins: {legend: {position: 'top'}, title: {display: true, text: 'Total de Impressões (Mono + Color) por Setor'}},
+        scales: {
+          y: {beginAtZero: true}
+        }
+      }
+    });
+
+    // Organiza dados para gráfico variação diária (soma das variações por data)
+    const variacaoPorData = {};
+    dadosFiltrados.forEach(d => {
+      if(!variacaoPorData[d.data]) variacaoPorData[d.data] = 0;
+      variacaoPorData[d.data] += d.diferencaDiaria;
+    });
+
+    const labelsVariacao = Object.keys(variacaoPorData).sort();
+    const valoresVariacao = labelsVariacao.map(d => variacaoPorData[d]);
+
+    if(chartVariacao) chartVariacao.destroy();
+    chartVariacao = new Chart(ctxVariacao, {
+      type: 'bar',
+      data: {
+        labels: labelsVariacao,
+        datasets: [{
+          label: 'Variação Diária Total',
+          data: valoresVariacao,
+          backgroundColor: '#007BFF'
+        }]
+      },
+      options: {
+        responsive:true,
+        plugins: {legend: {display: false}, title: {display: true, text: 'Variação Diária Total'}},
+        scales: {
+          y: {beginAtZero: true}
+        }
+      }
+    });
+  }
+
+  function randomColor() {
+    const r = Math.floor(Math.random()*150)+50;
+    const g = Math.floor(Math.random()*150)+50;
+    const b = Math.floor(Math.random()*150)+50;
+    return `rgb(${r},${g},${b})`;
+  }
 </script>
 
 </body>
