@@ -1,428 +1,198 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Estudo Histórico de Uso das Impressoras</title>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Estudo de Uso de Impressoras</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     * {
       box-sizing: border-box;
     }
+
     body {
       font-family: 'Poppins', sans-serif;
       background: #f5f5f5;
       padding: 20px;
       color: #333;
     }
+
     header {
       text-align: center;
       margin-bottom: 40px;
     }
+
     header h1 {
       color: #007BFF;
     }
+
     section {
-      max-width: 1100px;
-      margin: 0 auto 40px;
+      max-width: 1000px;
+      margin: 0 auto;
       background: #fff;
       padding: 30px;
       border-radius: 12px;
       box-shadow: 0 0 12px rgba(0, 0, 0, 0.1);
     }
-    input[type="file"], select, button {
-      margin: 10px 5px 20px 0;
-      padding: 8px 12px;
-      border-radius: 6px;
-      border: 1px solid #ccc;
-      font-size: 1rem;
+
+    input[type="file"] {
+      margin: 20px 0;
     }
+
     button {
+      padding: 10px 20px;
       background: #007BFF;
       color: white;
       border: none;
-      font-weight: 600;
+      border-radius: 6px;
+      font-weight: bold;
       cursor: pointer;
-      transition: background 0.3s ease;
+      margin-bottom: 20px;
     }
-    button:hover {
-      background: #0056b3;
-    }
+
     table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 20px;
-      font-size: 0.9rem;
     }
+
     th, td {
-      padding: 8px 12px;
+      padding: 10px;
       border-bottom: 1px solid #ccc;
-      text-align: center;
-      white-space: nowrap;
+      text-align: left;
     }
+
     th {
       background: #007BFF;
       color: white;
-      position: sticky;
-      top: 0;
-      z-index: 1;
     }
-    #resumo, #filtros {
-      margin-top: 10px;
-      padding: 15px;
-      background: #e9f7ef;
-      border-left: 6px solid #28a745;
-      font-weight: 600;
-    }
+
     canvas {
       margin-top: 40px;
-      max-width: 100%;
     }
-    #graficos {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 30px;
-      justify-content: space-around;
-    }
-    #graficos canvas {
-      flex: 1 1 300px;
-      max-width: 600px;
+
+    #resumo {
+      background: #e9f7ef;
+      padding: 20px;
+      margin-top: 30px;
+      border-left: 5px solid #28a745;
     }
   </style>
 </head>
 <body>
   <header>
-    <h1>Estudo Histórico de Uso das Impressoras</h1>
-    <p>Envie o arquivo CSV com dados históricos para análise completa</p>
+    <h1>Estudo de Padrões de Uso das Impressoras</h1>
+    <p>Envie um arquivo Excel (.xlsx) para análise diária das impressoras da unidade</p>
   </header>
 
   <section>
-    <input type="file" id="csvFile" accept=".csv" />
-    <button onclick="processarDados()">Analisar Dados</button>
-
-    <div id="filtros" style="display:none;">
-      <label for="setorSelect">Filtrar Setor:</label>
-      <select id="setorSelect"><option value="todos">Todos</option></select>
-      <label for="dataInicio">Data Início:</label>
-      <input type="date" id="dataInicio" />
-      <label for="dataFim">Data Fim:</label>
-      <input type="date" id="dataFim" />
-      <button onclick="filtrarDados()">Aplicar Filtro</button>
-    </div>
+    <input type="file" id="excelFile" accept=".xlsx">
+    <br>
+    <button onclick="analisarPadraoUso()">📊 Analisar</button>
 
     <div id="resumo"></div>
-
-    <div id="tabelaResumoContainer"></div>
-
-    <div id="graficos">
-      <canvas id="graficoToner"></canvas>
-      <canvas id="graficoImpressao"></canvas>
-      <canvas id="graficoVariacao"></canvas>
-    </div>
+    <canvas id="graficoUso"></canvas>
   </section>
 
-<script>
-  let dadosOriginais = [];
-  let dadosFiltrados = [];
-  let chartToner, chartImpressao, chartVariacao;
-
-  function processarDados() {
-    const file = document.getElementById('csvFile').files[0];
-    if (!file) {
-      alert('Por favor, selecione um arquivo CSV.');
-      return;
-    }
-
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: function(results) {
-        dadosOriginais = results.data.map(linha => {
-          // Normaliza e parseia dados importantes:
-          return {
-            data: linha['DATA'],
-            setor: linha['Setor'],
-            toner: parsePercent(linha['TONER']),
-            magenta: parsePercent(linha['Magenta (%)']),
-            yellow: parsePercent(linha['Yellow (%)']),
-            cyan: parsePercent(linha['Cyan (%)']),
-            fotocondutor: parsePercent(linha['FOTOCONDUTOR']),
-            fusor: parsePercent(linha['FUSOR']),
-            monoCount: parseInt(linha['Mono Lifetime Count']) || 0,
-            colorCount: parseInt(linha['Color Lifetime Count']) || 0,
-            diferencaDiaria: parseInt(linha['Diferencia diaria']) || 0,
-          };
-        });
-
-        // Preenche filtros de setor e datas
-        populaFiltros();
-        document.getElementById('filtros').style.display = 'block';
-
-        // Aplica filtro inicial sem restrição (todos)
-        dadosFiltrados = [...dadosOriginais];
-        atualizarAnalises();
+  <script>
+    function analisarPadraoUso() {
+      const file = document.getElementById('excelFile').files[0];
+      if (!file) {
+        alert('Selecione um arquivo Excel');
+        return;
       }
-    });
-  }
 
-  function parsePercent(valor) {
-    if (!valor) return null;
-    if (typeof valor === 'string' && valor.trim().endsWith('%')) {
-      return Number(valor.trim().replace('%',''));
-    }
-    const n = Number(valor);
-    return isNaN(n) ? null : n;
-  }
-
-  function populaFiltros() {
-    const setorSelect = document.getElementById('setorSelect');
-    setorSelect.innerHTML = '<option value="todos">Todos</option>';
-    const setoresUnicos = [...new Set(dadosOriginais.map(d => d.setor))].sort();
-    setoresUnicos.forEach(s => {
-      setorSelect.innerHTML += `<option value="${s}">${s}</option>`;
-    });
-
-    const datas = dadosOriginais.map(d => d.data).filter(d => !!d);
-    const minData = datas.reduce((a,b) => a < b ? a : b);
-    const maxData = datas.reduce((a,b) => a > b ? a : b);
-
-    document.getElementById('dataInicio').value = minData;
-    document.getElementById('dataFim').value = maxData;
-  }
-
-  function filtrarDados() {
-    const setor = document.getElementById('setorSelect').value;
-    const dataInicio = document.getElementById('dataInicio').value;
-    const dataFim = document.getElementById('dataFim').value;
-
-    dadosFiltrados = dadosOriginais.filter(d => {
-      let condSetor = setor === 'todos' || d.setor === setor;
-      let condData = true;
-      if(dataInicio) condData = condData && d.data >= dataInicio;
-      if(dataFim) condData = condData && d.data <= dataFim;
-      return condSetor && condData;
-    });
-
-    atualizarAnalises();
-  }
-
-  function atualizarAnalises() {
-    gerarResumo();
-    gerarTabelaResumo();
-    gerarGraficos();
-  }
-
-  function gerarResumo() {
-    const totalRegistros = dadosFiltrados.length;
-    const setores = [...new Set(dadosFiltrados.map(d => d.setor))];
-    const dataInicio = dadosFiltrados.reduce((a,b) => !a || a > b.data ? b.data : a, null);
-    const dataFim = dadosFiltrados.reduce((a,b) => !a || a < b.data ? b.data : a, null);
-
-    document.getElementById('resumo').innerHTML = `
-      <strong>Registros analisados:</strong> ${totalRegistros} <br/>
-      <strong>Setores únicos:</strong> ${setores.length} <br/>
-      <strong>Período:</strong> ${dataInicio} até ${dataFim}
-    `;
-  }
-
-  function gerarTabelaResumo() {
-    // Agrupa por setor e calcula médias e totais
-    const resumoSetor = {};
-    dadosFiltrados.forEach(d => {
-      if (!resumoSetor[d.setor]) {
-        resumoSetor[d.setor] = {
-          totalMono: 0,
-          totalColor: 0,
-          totalDiferenca: 0,
-          somaToner: 0,
-          qtdToner: 0,
-          somaFusor: 0,
-          qtdFusor: 0,
-          somaFotocondutor: 0,
-          qtdFotocondutor: 0,
-          count: 0
-        };
-      }
-      const r = resumoSetor[d.setor];
-      r.totalMono += d.monoCount;
-      r.totalColor += d.colorCount;
-      r.totalDiferenca += d.diferencaDiaria;
-      if (d.toner !== null) { r.somaToner += d.toner; r.qtdToner++; }
-      if (d.fusor !== null) { r.somaFusor += d.fusor; r.qtdFusor++; }
-      if (d.fotocondutor !== null) { r.somaFotocondutor += d.fotocondutor; r.qtdFotocondutor++; }
-      r.count++;
-    });
-
-    let html = `<table>
-      <thead>
-        <tr>
-          <th>Setor</th>
-          <th>Impressões Mono (Total)</th>
-          <th>Impressões Color (Total)</th>
-          <th>Consumo Médio Toner (%)</th>
-          <th>Consumo Médio Fusor (%)</th>
-          <th>Consumo Médio Fotocondutor (%)</th>
-          <th>Variação Diária Total</th>
-          <th>Dias Contabilizados</th>
-        </tr>
-      </thead><tbody>`;
-
-    for (const setor in resumoSetor) {
-      const r = resumoSetor[setor];
-      html += `<tr>
-        <td>${setor}</td>
-        <td>${r.totalMono}</td>
-        <td>${r.totalColor}</td>
-        <td>${(r.qtdToner ? (r.somaToner / r.qtdToner).toFixed(2) : 'N/A')}</td>
-        <td>${(r.qtdFusor ? (r.somaFusor / r.qtdFusor).toFixed(2) : 'N/A')}</td>
-        <td>${(r.qtdFotocondutor ? (r.somaFotocondutor / r.qtdFotocondutor).toFixed(2) : 'N/A')}</td>
-        <td>${r.totalDiferenca}</td>
-        <td>${r.count}</td>
-      </tr>`;
-    }
-    html += `</tbody></table>`;
-
-    document.getElementById('tabelaResumoContainer').innerHTML = html;
-  }
-
-  function gerarGraficos() {
-    const ctxToner = document.getElementById('graficoToner').getContext('2d');
-    const ctxImpressao = document.getElementById('graficoImpressao').getContext('2d');
-    const ctxVariacao = document.getElementById('graficoVariacao').getContext('2d');
-
-    // Agrupa dados para gráficos: média de toner e total impressões por setor por data
-    const dadosPorDataSetor = {};
-    dadosFiltrados.forEach(d => {
-      const chave = d.data + '|' + d.setor;
-      if (!dadosPorDataSetor[chave]) {
-        dadosPorDataSetor[chave] = {
-          data: d.data,
-          setor: d.setor,
-          toner: [],
-          mono: 0,
-          color: 0,
-          diferenca: 0
-        };
-      }
-      dadosPorDataSetor[chave].toner.push(d.toner);
-      dadosPorDataSetor[chave].mono += d.monoCount;
-      dadosPorDataSetor[chave].color += d.colorCount;
-      dadosPorDataSetor[chave].diferenca += d.diferencaDiaria;
-    });
-
-    // Para simplificar, escolher 3 setores com mais registros para plotar
-    const setoresCount = {};
-    for(const key in dadosPorDataSetor) {
-      const s = dadosPorDataSetor[key].setor;
-      setoresCount[s] = (setoresCount[s] || 0) + 1;
-    }
-    const setoresTop = Object.entries(setoresCount).sort((a,b)=>b[1]-a[1]).slice(0,3).map(e => e[0]);
-
-    // Organiza dados para gráfico toner
-    const labelsDatas = [...new Set(dadosFiltrados.map(d=>d.data))].sort();
-    const datasetsToner = setoresTop.map(setor => {
-      return {
-        label: setor,
-        data: labelsDatas.map(data => {
-          // calcular média toner para setor/data
-          const d = dadosFiltrados.filter(x => x.data === data && x.setor === setor && x.toner !== null);
-          if(d.length === 0) return null;
-          return d.reduce((sum,v) => sum + v.toner,0)/d.length;
-        }),
-        borderColor: randomColor(),
-        fill: false,
-        tension: 0.3,
-        spanGaps: true
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(sheet);
+        gerarResumo(json);
+        gerarGrafico(json);
       };
-    });
+      reader.readAsArrayBuffer(file);
+    }
 
-    if(chartToner) chartToner.destroy();
-    chartToner = new Chart(ctxToner, {
-      type: 'line',
-      data: {
-        labels: labelsDatas,
-        datasets: datasetsToner
-      },
-      options: {
-        responsive:true,
-        plugins: {legend: {position: 'top'}, title: {display: true, text: 'Consumo Médio Toner (%) por Setor'}},
-        scales: {
-          y: {beginAtZero: true, max: 100}
+    function gerarResumo(data) {
+      let totalImpressoes = 0;
+      let setores = {};
+      let tonerBaixo = 0;
+
+      data.forEach(row => {
+        const setor = row['setor'];
+        const preto = parseInt(row['QTD PRETO'] || 0);
+        const cor = parseInt(row['QTD COR'] || 0);
+        const toner = parseInt((row['TONER'] || '').replace('%','')) || 100;
+
+        if (!setores[setor]) {
+          setores[setor] = { total: 0 };
         }
-      }
-    });
 
-    // Organiza dados para gráfico de impressões totais
-    const datasetsImpressao = setoresTop.map(setor => {
-      return {
-        label: setor,
-        data: labelsDatas.map(data => {
-          const d = dadosFiltrados.filter(x => x.data === data && x.setor === setor);
-          if(d.length === 0) return 0;
-          return d.reduce((sum,v) => sum + v.monoCount + v.colorCount, 0);
-        }),
-        borderColor: randomColor(),
-        fill: false,
-        tension: 0.3,
-        spanGaps: true
-      };
-    });
-    if(chartImpressao) chartImpressao.destroy();
-    chartImpressao = new Chart(ctxImpressao, {
-      type: 'line',
-      data: {
-        labels: labelsDatas,
-        datasets: datasetsImpressao
-      },
-      options: {
-        responsive:true,
-        plugins: {legend: {position: 'top'}, title: {display: true, text: 'Total de Impressões (Mono + Color) por Setor'}},
-        scales: {
-          y: {beginAtZero: true}
+        setores[setor].total += preto + cor;
+        if (toner < 20) tonerBaixo++;
+        totalImpressoes += preto + cor;
+      });
+
+      const setoresKeys = Object.keys(setores);
+      let media = setoresKeys.length > 0 ? (totalImpressoes / setoresKeys.length).toFixed(2) : 0;
+      let maisUsada = setoresKeys.map(s => [s, setores[s].total]).sort((a, b) => b[1] - a[1])[0];
+      let menosUsada = setoresKeys.map(s => [s, setores[s].total]).sort((a, b) => a[1] - b[1])[0];
+
+      const resumo = `
+        <h3>Resumo Geral:</h3>
+        <ul>
+          <li><strong>Setores analisados:</strong> ${setoresKeys.length}</li>
+          <li><strong>Total de impressões:</strong> ${totalImpressoes}</li>
+          <li><strong>Média por setor:</strong> ${media}</li>
+          <li><strong>Setor mais ativo:</strong> ${maisUsada[0]} (${maisUsada[1]} páginas)</li>
+          <li><strong>Setor menos ativo:</strong> ${menosUsada[0]} (${menosUsada[1]} páginas)</li>
+          <li><strong>Registros com toner abaixo de 20%:</strong> ${tonerBaixo}</li>
+        </ul>
+      `;
+      document.getElementById('resumo').innerHTML = resumo;
+    }
+
+    function gerarGrafico(data) {
+      const ctx = document.getElementById('graficoUso').getContext('2d');
+      const setores = {};
+
+      data.forEach(row => {
+        const setor = row['setor'];
+        const total = parseInt(row['QTD PRETO'] || 0) + parseInt(row['QTD COR'] || 0);
+        setores[setor] = (setores[setor] || 0) + total;
+      });
+
+      const labels = Object.keys(setores);
+      const valores = Object.values(setores);
+
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Total de Impressões por Setor',
+            data: valores,
+            backgroundColor: '#007BFF'
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            title: {
+              display: true,
+              text: 'Volume de Impressão por Setor'
+            },
+            legend: {
+              display: false
+            }
+          }
         }
-      }
-    });
-
-    // Organiza dados para gráfico variação diária (soma das variações por data)
-    const variacaoPorData = {};
-    dadosFiltrados.forEach(d => {
-      if(!variacaoPorData[d.data]) variacaoPorData[d.data] = 0;
-      variacaoPorData[d.data] += d.diferencaDiaria;
-    });
-
-    const labelsVariacao = Object.keys(variacaoPorData).sort();
-    const valoresVariacao = labelsVariacao.map(d => variacaoPorData[d]);
-
-    if(chartVariacao) chartVariacao.destroy();
-    chartVariacao = new Chart(ctxVariacao, {
-      type: 'bar',
-      data: {
-        labels: labelsVariacao,
-        datasets: [{
-          label: 'Variação Diária Total',
-          data: valoresVariacao,
-          backgroundColor: '#007BFF'
-        }]
-      },
-      options: {
-        responsive:true,
-        plugins: {legend: {display: false}, title: {display: true, text: 'Variação Diária Total'}},
-        scales: {
-          y: {beginAtZero: true}
-        }
-      }
-    });
-  }
-
-  function randomColor() {
-    const r = Math.floor(Math.random()*150)+50;
-    const g = Math.floor(Math.random()*150)+50;
-    const b = Math.floor(Math.random()*150)+50;
-    return `rgb(${r},${g},${b})`;
-  }
-</script>
-
+      });
+    }
+  </script>
 </body>
 </html>
