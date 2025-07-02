@@ -20,7 +20,9 @@
 <input type="file" id="inputExcel" accept=".xlsx" />
 <br/>
 <label for="mesSelect">Selecione o mês/ano:</label>
-<select id="mesSelect" onchange="gerarRelatorio()"></select>
+<select id="mesSelect"></select>
+<br/>
+<button id="btnAnalisar" disabled>Analisar</button>
 
 <div id="resumo"></div>
 
@@ -41,7 +43,7 @@
 
   document.getElementById('inputExcel').addEventListener('change', e => {
     const file = e.target.files[0];
-    if (!file) return alert('Selecione um arquivo Excel');
+    if (!file) return;
 
     const reader = new FileReader();
     reader.onload = evt => {
@@ -51,7 +53,9 @@
       const jsonData = XLSX.utils.sheet_to_json(sheet, {defval:''});
       processarDados(jsonData);
       preencherMeses();
-      gerarRelatorio();
+      document.getElementById('btnAnalisar').disabled = false;
+      document.getElementById('resumo').innerHTML = '';
+      limparGraficos();
     };
     reader.readAsArrayBuffer(file);
   });
@@ -104,12 +108,27 @@
     });
   }
 
-  function gerarRelatorio() {
-    const mes = document.getElementById('mesSelect').value || meses[0];
-    if (!mes) return;
+  function limparGraficos() {
+    if(chartTotal) { chartTotal.destroy(); chartTotal = null; }
+    if(chartTonerMedia) { chartTonerMedia.destroy(); chartTonerMedia = null; }
+    if(chartTonerBaixo) { chartTonerBaixo.destroy(); chartTonerBaixo = null; }
+  }
 
+  document.getElementById('btnAnalisar').addEventListener('click', () => {
+    const mes = document.getElementById('mesSelect').value;
+    if (!mes) {
+      alert('Selecione um mês para análise.');
+      return;
+    }
+    gerarRelatorio(mes);
+  });
+
+  function gerarRelatorio(mes) {
+    if (!dadosAgrupados[mes]) {
+      alert('Não há dados para o mês selecionado.');
+      return;
+    }
     const dadosMes = dadosAgrupados[mes];
-    if (!dadosMes) return;
 
     // Resumo texto
     let totalImp = 0, totalReg = 0, tonerBaixoReg = 0;
@@ -118,21 +137,22 @@
       totalReg += dadosMes[setor].registros;
       tonerBaixoReg += dadosMes[setor].tonerBaixoCount;
     }
-    const mediaDiaria = (totalImp / totalReg).toFixed(2);
+    const mediaDiaria = totalReg ? (totalImp / totalReg).toFixed(2) : 0;
     document.getElementById('resumo').innerHTML = `
       <h2>Resumo para ${mes.split('-')[1]}/${mes.split('-')[0]}</h2>
-      <p>Total Impressões: <strong>${totalImp}</strong></p>
-      <p>Média diária: <strong>${mediaDiaria}</strong></p>
-      <p>Registros com toner abaixo de 20%: <strong>${tonerBaixoReg}</strong></p>
+      <p><strong>Total de Impressões:</strong> ${totalImp}</p>
+      <p><strong>Média diária:</strong> ${mediaDiaria}</p>
+      <p><strong>Registros com toner abaixo de 20%:</strong> ${tonerBaixoReg}</p>
     `;
 
     const setores = Object.keys(dadosMes);
     const totais = setores.map(s => dadosMes[s].totalImpressao);
     const tonerMedias = setores.map(s => (dadosMes[s].tonerSum/dadosMes[s].tonerCount).toFixed(2));
-    const tonerBaixoPercent = setores.map(s => ((dadosMes[s].tonerBaixoCount/dadosMes[s].registros)*100).toFixed(2));
+    const tonerBaixoPercent = setores.map(s => dadosMes[s].tonerCount ? ((dadosMes[s].tonerBaixoCount/dadosMes[s].tonerCount)*100).toFixed(2) : 0);
+
+    limparGraficos();
 
     // Gráfico total impressões por setor
-    if(chartTotal) chartTotal.destroy();
     chartTotal = new Chart(document.getElementById('grafTotalImpressao').getContext('2d'), {
       type: 'bar',
       data: {
@@ -143,7 +163,6 @@
     });
 
     // Gráfico média toner por setor
-    if(chartTonerMedia) chartTonerMedia.destroy();
     chartTonerMedia = new Chart(document.getElementById('grafTonerMedia').getContext('2d'), {
       type: 'line',
       data: {
@@ -154,7 +173,6 @@
     });
 
     // Gráfico percentual toner baixo por setor
-    if(chartTonerBaixo) chartTonerBaixo.destroy();
     chartTonerBaixo = new Chart(document.getElementById('grafTonerBaixo').getContext('2d'), {
       type: 'pie',
       data: {
@@ -162,7 +180,7 @@
         datasets: [{
           label: '% Toner Baixo',
           data: tonerBaixoPercent,
-          backgroundColor: setores.map((_,i) => `hsl(${i*360/sectores.length}, 70%, 60%)`)
+          backgroundColor: setores.map((_,i) => `hsl(${i*360/setores.length}, 70%, 60%)`)
         }]
       },
       options: { responsive:true }
