@@ -3,219 +3,314 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Estudo de Uso de Impressoras</title>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet" />
+  <title>Análise Histórica de Uso de Impressoras</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
   <style>
-    * {
-      box-sizing: border-box;
-    }
-
     body {
       font-family: 'Poppins', sans-serif;
-      background: #f5f5f5;
-      padding: 20px;
+      background: #f9f9f9;
+      margin: 20px;
       color: #333;
     }
-
-    header {
+    h1, h2 {
       text-align: center;
-      margin-bottom: 40px;
+      color: #004aad;
     }
-
-    header h1 {
-      color: #007BFF;
-    }
-
     section {
       max-width: 1000px;
-      margin: 0 auto;
+      margin: 0 auto 40px;
       background: #fff;
-      padding: 30px;
       border-radius: 12px;
-      box-shadow: 0 0 12px rgba(0, 0, 0, 0.1);
+      padding: 20px 30px;
+      box-shadow: 0 3px 10px rgb(0 0 0 / 0.1);
     }
-
-    input[type="file"] {
-      margin: 20px 0;
+    input[type=file], button {
+      display: block;
+      margin: 15px auto;
+      padding: 12px 20px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      font-size: 1rem;
+      cursor: pointer;
     }
-
     button {
-      padding: 10px 20px;
-      background: #007BFF;
+      background-color: #004aad;
       color: white;
       border: none;
-      border-radius: 6px;
-      font-weight: bold;
-      cursor: pointer;
-      margin-bottom: 20px;
+      transition: background-color 0.3s ease;
     }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
+    button:hover {
+      background-color: #002f6c;
+    }
+    #summary {
       margin-top: 20px;
+      padding: 15px;
+      background: #e6f0ff;
+      border-radius: 8px;
+      font-size: 1rem;
+      line-height: 1.4;
+      white-space: pre-wrap;
     }
-
-    th,
-    td {
-      padding: 10px;
-      border-bottom: 1px solid #ccc;
-      text-align: left;
-    }
-
-    th {
-      background: #007BFF;
-      color: white;
-    }
-
     canvas {
-      margin-top: 40px;
-    }
-
-    #resumo {
-      background: #e9f7ef;
-      padding: 20px;
       margin-top: 30px;
-      border-left: 5px solid #28a745;
+      max-width: 100%;
+    }
+    label {
+      text-align: center;
+      display: block;
+      font-weight: 600;
+      margin-top: 10px;
+      color: #004aad;
+    }
+    select {
+      margin: 0 auto 20px;
+      display: block;
+      padding: 6px 12px;
+      font-size: 1rem;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      width: 240px;
+      text-align: center;
     }
   </style>
 </head>
 <body>
-  <header>
-    <h1>Estudo de Padrões de Uso das Impressoras</h1>
-    <p>Envie um arquivo CSV para análise diária das impressoras da unidade</p>
-  </header>
 
   <section>
+    <h1>Análise Histórica de Uso de Impressoras</h1>
+    <label for="csvFile">Selecione o arquivo CSV com dados diários</label>
     <input type="file" id="csvFile" accept=".csv" />
-    <br />
-    <button onclick="analisarPadraoUso()">📊 Analisar</button>
+    <button id="analyzeBtn">Analisar</button>
 
-    <div id="resumo"></div>
-    <canvas id="graficoUso"></canvas>
+    <label for="filterSetor">Filtrar por Setor:</label>
+    <select id="filterSetor" disabled>
+      <option value="">Todos</option>
+    </select>
+
+    <label for="filterImpressora">Filtrar por Impressora (Serial Number):</label>
+    <select id="filterImpressora" disabled>
+      <option value="">Todas</option>
+    </select>
+
+    <div id="summary"></div>
+
+    <canvas id="chartImpressoes" height="150"></canvas>
+    <canvas id="chartToner" height="150"></canvas>
   </section>
 
-  <script>
-    function analisarPadraoUso() {
-      const file = document.getElementById('csvFile').files[0];
-      if (!file) {
-        alert('Selecione um arquivo CSV');
-        return;
-      }
+<script>
+  const csvInput = document.getElementById('csvFile');
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  const filterSetor = document.getElementById('filterSetor');
+  const filterImpressora = document.getElementById('filterImpressora');
+  const summaryDiv = document.getElementById('summary');
+  const ctxImpressoes = document.getElementById('chartImpressoes').getContext('2d');
+  const ctxToner = document.getElementById('chartToner').getContext('2d');
 
-      Papa.parse(file, {
-        header: true,
-        skipEmptyLines: true,
-        complete: function (results) {
-          const data = results.data;
-          gerarResumo(data);
-          gerarGrafico(data);
+  let rawData = [];
+  let chartImpressoes, chartToner;
+
+  function parsePercentToNumber(str) {
+    if (!str) return 0;
+    return Number(str.toString().replace('%','').trim()) || 0;
+  }
+
+  function dateToISO(dateStr) {
+    // Suporta dd/mm/yyyy ou dd-mm-yyyy
+    const parts = dateStr.split(/[\/\-]/);
+    if(parts.length !== 3) return null;
+    return new Date(parts[2], parts[1]-1, parts[0]).toISOString().slice(0,10);
+  }
+
+  function getUniqueValues(arr, key) {
+    return [...new Set(arr.map(x => x[key]).filter(x => x))].sort();
+  }
+
+  function filterData(data, setor, impressora) {
+    return data.filter(d => {
+      return (setor ? d['Setor'] === setor : true) && (impressora ? d['Serial Number'] === impressora : true);
+    });
+  }
+
+  function aggregateByDate(data) {
+    // soma impressões por data
+    const agg = {};
+    data.forEach(d => {
+      const date = dateToISO(d['DATA']);
+      if (!date) return;
+      const mono = Number(d['Mono Lifetime Count']) || 0;
+      const color = Number(d['Color Lifetime Count']) || 0;
+      const impressoes = mono + color;
+      if(!agg[date]) agg[date] = 0;
+      agg[date] += impressoes;
+    });
+    return agg;
+  }
+
+  function aggregateTonerByDate(data) {
+    const agg = {};
+    data.forEach(d => {
+      const date = dateToISO(d['DATA']);
+      if (!date) return;
+      const toner = parsePercentToNumber(d['TONER']);
+      if(!agg[date]) agg[date] = [];
+      agg[date].push(toner);
+    });
+    // calcular média toner por dia
+    const avgToner = {};
+    Object.keys(agg).forEach(date => {
+      const arr = agg[date];
+      const avg = arr.reduce((a,b) => a+b,0) / arr.length;
+      avgToner[date] = avg;
+    });
+    return avgToner;
+  }
+
+  function updateFilters(data) {
+    const setores = getUniqueValues(data, 'Setor');
+    filterSetor.innerHTML = '<option value="">Todos</option>' + setores.map(s => `<option value="${s}">${s}</option>`).join('');
+    filterSetor.disabled = false;
+
+    const impressoras = getUniqueValues(data, 'Serial Number');
+    filterImpressora.innerHTML = '<option value="">Todas</option>' + impressoras.map(s => `<option value="${s}">${s}</option>`).join('');
+    filterImpressora.disabled = false;
+  }
+
+  function generateSummary(data) {
+    const impressoras = getUniqueValues(data, 'Serial Number');
+    const totalImpressoes = data.reduce((acc, d) => {
+      const mono = Number(d['Mono Lifetime Count']) || 0;
+      const color = Number(d['Color Lifetime Count']) || 0;
+      return acc + mono + color;
+    }, 0);
+
+    const mediaImpressoes = (totalImpressoes / impressoras.length) || 0;
+
+    // Toner abaixo de 20%
+    const tonerBaixoCount = data.filter(d => parsePercentToNumber(d['TONER']) < 20).length;
+
+    return `
+Impressoras analisadas: ${impressoras.length}
+Total de impressões: ${totalImpressoes.toLocaleString('pt-BR')}
+Média por impressora: ${mediaImpressoes.toFixed(2)}
+Impressoras com toner abaixo de 20%: ${tonerBaixoCount}
+`;
+  }
+
+  function renderCharts(data) {
+    const agregImpressoes = aggregateByDate(data);
+    const agregToner = aggregateTonerByDate(data);
+
+    const labels = Object.keys(agregImpressoes).sort();
+    const valuesImpressoes = labels.map(d => agregImpressoes[d]);
+    const valuesToner = labels.map(d => agregToner[d] || 0);
+
+    if(chartImpressoes) chartImpressoes.destroy();
+    chartImpressoes = new Chart(ctxImpressoes, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Total Impressões (Mono + Color)',
+          data: valuesImpressoes,
+          borderColor: '#004aad',
+          backgroundColor: 'rgba(0, 74, 173, 0.2)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 3
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: true },
+          title: { display: true, text: 'Tendência de Impressões Diárias' }
         },
-      });
-    }
-
-    function gerarResumo(data) {
-      let totalImpressoes = 0;
-      let totalDiario = 0;
-      const impressoras = {};
-      let tonerBaixo = 0;
-
-      data.forEach((row) => {
-        const setor = row['Setor'] || 'Desconhecido';
-        const mono = parseInt(row['Mono Lifetime Count'] || '0', 10);
-        const color = parseInt(row['Color Lifetime Count'] || '0', 10);
-        const diaria = parseInt(row['Diferencia diaria'] || '0', 10);
-        let tonerStr = row['TONER'] || '100%';
-        let toner = parseInt(tonerStr.replace('%', '').trim(), 10);
-        if (isNaN(toner)) toner = 100;
-
-        if (!impressoras[setor]) {
-          impressoras[setor] = { total: 0, toner: toner };
+        scales: {
+          y: { beginAtZero: true },
+          x: {
+            type: 'time',
+            time: {
+              unit: 'day',
+              tooltipFormat: 'dd/MM/yyyy',
+              displayFormats: { day: 'dd/MM/yyyy' }
+            }
+          }
         }
+      }
+    });
 
-        impressoras[setor].total += mono + color;
-        totalImpressoes += mono + color;
+    if(chartToner) chartToner.destroy();
+    chartToner = new Chart(ctxToner, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Média de TONER (%)',
+          data: valuesToner,
+          borderColor: '#28a745',
+          backgroundColor: 'rgba(40, 167, 69, 0.2)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 3
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: true },
+          title: { display: true, text: 'Tendência de Toner Médio Diário' }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            max: 100
+          },
+          x: {
+            type: 'time',
+            time: {
+              unit: 'day',
+              tooltipFormat: 'dd/MM/yyyy',
+              displayFormats: { day: 'dd/MM/yyyy' }
+            }
+          }
+        }
+      }
+    });
+  }
 
-        totalDiario += diaria;
+  function onFilterChange() {
+    const setor = filterSetor.value;
+    const impressora = filterImpressora.value;
+    const filtered = filterData(rawData, setor, impressora);
+    summaryDiv.textContent = generateSummary(filtered);
+    renderCharts(filtered);
+  }
 
-        if (toner < 20) tonerBaixo++;
-      });
-
-      const numImpressoras = Object.keys(impressoras).length;
-      const media = numImpressoras ? (totalImpressoes / numImpressoras).toFixed(2) : 0;
-
-      const maisUsada = Object.entries(impressoras).sort((a, b) => b[1].total - a[1].total)[0];
-      const menosUsada = Object.entries(impressoras).sort((a, b) => a[1].total - b[1].total)[0];
-
-      const resumo = `
-        <h3>Resumo Geral:</h3>
-        <ul>
-          <li><strong>Impressoras analisadas:</strong> ${numImpressoras}</li>
-          <li><strong>Total de impressões:</strong> ${totalImpressoes.toLocaleString('pt-BR')}</li>
-          <li><strong>Média por impressora:</strong> ${media.toLocaleString('pt-BR')}</li>
-          <li><strong>Mais usada:</strong> ${maisUsada ? maisUsada[0] : 'N/A'} (${maisUsada ? maisUsada[1].total.toLocaleString('pt-BR') : '0'} páginas)</li>
-          <li><strong>Menos usada:</strong> ${menosUsada ? menosUsada[0] : 'N/A'} (${menosUsada ? menosUsada[1].total.toLocaleString('pt-BR') : '0'} páginas)</li>
-          <li><strong>Impressoras com toner abaixo de 20%:</strong> ${tonerBaixo}</li>
-          <li><strong>Total diário de impressões:</strong> ${totalDiario.toLocaleString('pt-BR')}</li>
-        </ul>
-      `;
-
-      document.getElementById('resumo').innerHTML = resumo;
+  analyzeBtn.addEventListener('click', () => {
+    const file = csvInput.files[0];
+    if (!file) {
+      alert('Por favor selecione um arquivo CSV');
+      return;
     }
 
-    function gerarGrafico(data) {
-      const ctx = document.getElementById('graficoUso').getContext('2d');
-      const mapa = {};
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        rawData = results.data;
+        updateFilters(rawData);
+        onFilterChange();
+      },
+      error: () => alert('Erro ao ler arquivo CSV')
+    });
+  });
 
-      data.forEach((row) => {
-        const setor = row['Setor'] || 'Desconhecido';
-        const diaria = parseInt(row['Diferencia diaria'] || '0', 10);
-        if (!mapa[setor]) mapa[setor] = 0;
-        mapa[setor] += diaria;
-      });
+  filterSetor.addEventListener('change', onFilterChange);
+  filterImpressora.addEventListener('change', onFilterChange);
+</script>
 
-      const labels = Object.keys(mapa);
-      const valores = Object.values(mapa);
-
-      if (window.grafico) window.grafico.destroy();
-
-      window.grafico = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: labels,
-          datasets: [
-            {
-              label: 'Impressões diárias',
-              data: valores,
-              backgroundColor: '#28a745',
-              borderRadius: 4,
-            },
-          ],
-        },
-        options: {
-          responsive: true,
-          plugins: {
-            title: {
-              display: true,
-              text: 'Impressões Diárias por Setor',
-            },
-            legend: {
-              display: false,
-            },
-          },
-          scales: {
-            y: {
-              beginAtZero: true,
-              ticks: {
-                callback: (val) => val.toLocaleString('pt-BR'),
-              },
-            },
-          },
-        },
-      });
-    }
-  </script>
 </body>
 </html>
