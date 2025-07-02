@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Estudo de Uso de Impressoras</title>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
   <style>
@@ -58,7 +58,8 @@
       margin-top: 20px;
     }
 
-    th, td {
+    th,
+    td {
       padding: 10px;
       border-bottom: 1px solid #ccc;
       text-align: left;
@@ -88,8 +89,8 @@
   </header>
 
   <section>
-    <input type="file" id="csvFile" accept=".csv">
-    <br>
+    <input type="file" id="csvFile" accept=".csv" />
+    <br />
     <button onclick="analisarPadraoUso()">📊 Analisar</button>
 
     <div id="resumo"></div>
@@ -107,88 +108,112 @@
       Papa.parse(file, {
         header: true,
         skipEmptyLines: true,
-        complete: function(results) {
+        complete: function (results) {
           const data = results.data;
           gerarResumo(data);
           gerarGrafico(data);
-        }
+        },
       });
     }
 
     function gerarResumo(data) {
       let totalImpressoes = 0;
-      let impressoras = {};
+      let totalDiario = 0;
+      const impressoras = {};
       let tonerBaixo = 0;
 
-      data.forEach(row => {
-        const serial = row['Serial Number'];
-        const mono = parseInt(row['Mono Lifetime Count'] || 0);
-        const color = parseInt(row['Color Lifetime Count'] || 0);
-        const black = parseInt(row['Black (%)'] || 100);
+      data.forEach((row) => {
+        const setor = row['Setor'] || 'Desconhecido';
+        const mono = parseInt(row['Mono Lifetime Count'] || '0', 10);
+        const color = parseInt(row['Color Lifetime Count'] || '0', 10);
+        const diaria = parseInt(row['Diferencia diaria'] || '0', 10);
+        let tonerStr = row['TONER'] || '100%';
+        let toner = parseInt(tonerStr.replace('%', '').trim(), 10);
+        if (isNaN(toner)) toner = 100;
 
-        if (!impressoras[serial]) {
-          impressoras[serial] = { total: 0, toner: black };
+        if (!impressoras[setor]) {
+          impressoras[setor] = { total: 0, toner: toner };
         }
 
-        impressoras[serial].total += mono + color;
-        if (black < 20) tonerBaixo++;
+        impressoras[setor].total += mono + color;
         totalImpressoes += mono + color;
+
+        totalDiario += diaria;
+
+        if (toner < 20) tonerBaixo++;
       });
 
-      let media = (totalImpressoes / Object.keys(impressoras).length).toFixed(2);
-      let maisUsada = Object.entries(impressoras).sort((a, b) => b[1].total - a[1].total)[0];
-      let menosUsada = Object.entries(impressoras).sort((a, b) => a[1].total - b[1].total)[0];
+      const numImpressoras = Object.keys(impressoras).length;
+      const media = numImpressoras ? (totalImpressoes / numImpressoras).toFixed(2) : 0;
+
+      const maisUsada = Object.entries(impressoras).sort((a, b) => b[1].total - a[1].total)[0];
+      const menosUsada = Object.entries(impressoras).sort((a, b) => a[1].total - b[1].total)[0];
 
       const resumo = `
         <h3>Resumo Geral:</h3>
         <ul>
-          <li><strong>Impressoras analisadas:</strong> ${Object.keys(impressoras).length}</li>
-          <li><strong>Total de impressões:</strong> ${totalImpressoes}</li>
-          <li><strong>Média por impressora:</strong> ${media}</li>
-          <li><strong>Mais usada:</strong> ${maisUsada[0]} (${maisUsada[1].total} páginas)</li>
-          <li><strong>Menos usada:</strong> ${menosUsada[0]} (${menosUsada[1].total} páginas)</li>
+          <li><strong>Impressoras analisadas:</strong> ${numImpressoras}</li>
+          <li><strong>Total de impressões:</strong> ${totalImpressoes.toLocaleString('pt-BR')}</li>
+          <li><strong>Média por impressora:</strong> ${media.toLocaleString('pt-BR')}</li>
+          <li><strong>Mais usada:</strong> ${maisUsada ? maisUsada[0] : 'N/A'} (${maisUsada ? maisUsada[1].total.toLocaleString('pt-BR') : '0'} páginas)</li>
+          <li><strong>Menos usada:</strong> ${menosUsada ? menosUsada[0] : 'N/A'} (${menosUsada ? menosUsada[1].total.toLocaleString('pt-BR') : '0'} páginas)</li>
           <li><strong>Impressoras com toner abaixo de 20%:</strong> ${tonerBaixo}</li>
+          <li><strong>Total diário de impressões:</strong> ${totalDiario.toLocaleString('pt-BR')}</li>
         </ul>
       `;
+
       document.getElementById('resumo').innerHTML = resumo;
     }
 
     function gerarGrafico(data) {
       const ctx = document.getElementById('graficoUso').getContext('2d');
+      const mapa = {};
 
-      const labels = [];
-      const valores = [];
-
-      data.forEach(row => {
-        const serial = row['Serial Number'];
-        const mono = parseInt(row['Mono Lifetime Count'] || 0);
-        const color = parseInt(row['Color Lifetime Count'] || 0);
-        labels.push(serial);
-        valores.push(mono + color);
+      data.forEach((row) => {
+        const setor = row['Setor'] || 'Desconhecido';
+        const diaria = parseInt(row['Diferencia diaria'] || '0', 10);
+        if (!mapa[setor]) mapa[setor] = 0;
+        mapa[setor] += diaria;
       });
 
-      new Chart(ctx, {
+      const labels = Object.keys(mapa);
+      const valores = Object.values(mapa);
+
+      if (window.grafico) window.grafico.destroy();
+
+      window.grafico = new Chart(ctx, {
         type: 'bar',
         data: {
           labels: labels,
-          datasets: [{
-            label: 'Total de Impressões',
-            data: valores,
-            backgroundColor: '#007BFF'
-          }]
+          datasets: [
+            {
+              label: 'Impressões diárias',
+              data: valores,
+              backgroundColor: '#28a745',
+              borderRadius: 4,
+            },
+          ],
         },
         options: {
           responsive: true,
           plugins: {
             title: {
               display: true,
-              text: 'Volume de Impressão por Impressora'
+              text: 'Impressões Diárias por Setor',
             },
             legend: {
-              display: false
-            }
-          }
-        }
+              display: false,
+            },
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                callback: (val) => val.toLocaleString('pt-BR'),
+              },
+            },
+          },
+        },
       });
     }
   </script>
