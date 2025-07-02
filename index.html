@@ -1,33 +1,29 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Estudo de Uso de Impressoras</title>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Estudo de Padrões de Uso das Impressoras - Excel</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <style>
     * {
       box-sizing: border-box;
     }
-
     body {
       font-family: 'Poppins', sans-serif;
       background: #f5f5f5;
       padding: 20px;
       color: #333;
     }
-
     header {
       text-align: center;
       margin-bottom: 40px;
     }
-
     header h1 {
       color: #007BFF;
     }
-
     section {
       max-width: 1000px;
       margin: 0 auto;
@@ -36,11 +32,9 @@
       border-radius: 12px;
       box-shadow: 0 0 12px rgba(0, 0, 0, 0.1);
     }
-
     input[type="file"] {
       margin: 20px 0;
     }
-
     button {
       padding: 10px 20px;
       background: #007BFF;
@@ -51,28 +45,23 @@
       cursor: pointer;
       margin-bottom: 20px;
     }
-
     table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 20px;
     }
-
     th, td {
       padding: 10px;
       border-bottom: 1px solid #ccc;
       text-align: left;
     }
-
     th {
       background: #007BFF;
       color: white;
     }
-
     canvas {
       margin-top: 40px;
     }
-
     #resumo {
       background: #e9f7ef;
       padding: 20px;
@@ -83,99 +72,123 @@
 </head>
 <body>
   <header>
-    <h1>Estudo de Padrões de Uso das Impressoras</h1>
+    <h1>Estudo de Padrões de Uso das Impressoras (Excel)</h1>
     <p>Envie um arquivo Excel (.xlsx) para análise diária das impressoras da unidade</p>
   </header>
 
   <section>
-    <input type="file" id="excelFile" accept=".xlsx">
-    <br>
-    <button onclick="analisarPadraoUso()">📊 Analisar</button>
+    <input type="file" id="excelFile" accept=".xlsx" />
+    <br />
+    <button onclick="analisarExcel()">📊 Analisar</button>
 
     <div id="resumo"></div>
     <canvas id="graficoUso"></canvas>
   </section>
 
   <script>
-    function analisarPadraoUso() {
-      const file = document.getElementById('excelFile').files[0];
-      if (!file) {
-        alert('Selecione um arquivo Excel');
+    function analisarExcel() {
+      const input = document.getElementById('excelFile');
+      if (!input.files.length) {
+        alert('Selecione um arquivo Excel (.xlsx)');
         return;
       }
-
+      const file = input.files[0];
       const reader = new FileReader();
-      reader.onload = function (e) {
+
+      reader.onload = (e) => {
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
+
+        // Assume primeira aba
         const sheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
-        const json = XLSX.utils.sheet_to_json(sheet);
-        gerarResumo(json);
-        gerarGrafico(json);
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+
+        if (jsonData.length === 0) {
+          alert('Arquivo vazio ou inválido');
+          return;
+        }
+
+        processarDados(jsonData);
       };
+
       reader.readAsArrayBuffer(file);
     }
 
-    function gerarResumo(data) {
-      let totalImpressoes = 0;
+    function processarDados(data) {
+      let totalImpressao = 0;
       let setores = {};
-      let tonerBaixo = 0;
+      let tonerBaixoCount = 0;
+
+      // Colunas esperadas: data, setor, TONER, Magenta (%), Yellow (%), Cyan (%), UNIDADE DE IMAGEM, FUSOR, QTD PRETO, QTD COR, DIFERENCIA DIARIA
 
       data.forEach(row => {
-        const setor = row['setor'];
-        const preto = parseInt(row['QTD PRETO'] || 0);
-        const cor = parseInt(row['QTD COR'] || 0);
-        const toner = parseInt((row['TONER'] || '').replace('%','')) || 100;
+        const setor = row['setor'] || row['Setor'] || '';
+        const tonerStr = row['TONER'] || row['Toner'] || '0%';
+        const qtdPreto = parseInt(row['QTD PRETO'] || row['Qtd Preto'] || 0);
+        const qtdCor = parseInt(row['QTD COR'] || row['Qtd Cor'] || 0);
+
+        // Converter toner para número (ex: "13%" -> 13)
+        const toner = parseInt(tonerStr.toString().replace('%', '').trim()) || 0;
 
         if (!setores[setor]) {
-          setores[setor] = { total: 0 };
+          setores[setor] = { total: 0, tonerValues: [] };
         }
+        setores[setor].total += qtdPreto + qtdCor;
+        setores[setor].tonerValues.push(toner);
 
-        setores[setor].total += preto + cor;
-        if (toner < 20) tonerBaixo++;
-        totalImpressoes += preto + cor;
+        totalImpressao += qtdPreto + qtdCor;
+        if (toner < 20) tonerBaixoCount++;
       });
 
-      const setoresKeys = Object.keys(setores);
-      let media = setoresKeys.length > 0 ? (totalImpressoes / setoresKeys.length).toFixed(2) : 0;
-      let maisUsada = setoresKeys.map(s => [s, setores[s].total]).sort((a, b) => b[1] - a[1])[0];
-      let menosUsada = setoresKeys.map(s => [s, setores[s].total]).sort((a, b) => a[1] - b[1])[0];
+      const numSetores = Object.keys(setores).length;
+      const media = (totalImpressao / numSetores).toFixed(2);
 
-      const resumo = `
+      // Encontrar setor mais e menos usado
+      const setoresOrdenados = Object.entries(setores).sort((a, b) => b[1].total - a[1].total);
+      const maisUsado = setoresOrdenados[0];
+      const menosUsado = setoresOrdenados[setoresOrdenados.length - 1];
+
+      // Exibir resumo
+      const resumoHTML = `
         <h3>Resumo Geral:</h3>
         <ul>
-          <li><strong>Setores analisados:</strong> ${setoresKeys.length}</li>
-          <li><strong>Total de impressões:</strong> ${totalImpressoes}</li>
+          <li><strong>Setores analisados:</strong> ${numSetores}</li>
+          <li><strong>Total de impressões:</strong> ${totalImpressao}</li>
           <li><strong>Média por setor:</strong> ${media}</li>
-          <li><strong>Setor mais ativo:</strong> ${maisUsada[0]} (${maisUsada[1]} páginas)</li>
-          <li><strong>Setor menos ativo:</strong> ${menosUsada[0]} (${menosUsada[1]} páginas)</li>
-          <li><strong>Registros com toner abaixo de 20%:</strong> ${tonerBaixo}</li>
+          <li><strong>Mais usado:</strong> ${maisUsado[0]} (${maisUsado[1].total} páginas)</li>
+          <li><strong>Menos usado:</strong> ${menosUsado[0]} (${menosUsado[1].total} páginas)</li>
+          <li><strong>Registros com toner abaixo de 20%:</strong> ${tonerBaixoCount}</li>
         </ul>
       `;
-      document.getElementById('resumo').innerHTML = resumo;
+      document.getElementById('resumo').innerHTML = resumoHTML;
+
+      gerarGrafico(setores);
     }
 
-    function gerarGrafico(data) {
+    function gerarGrafico(setores) {
       const ctx = document.getElementById('graficoUso').getContext('2d');
-      const setores = {};
 
-      data.forEach(row => {
-        const setor = row['setor'];
-        const total = parseInt(row['QTD PRETO'] || 0) + parseInt(row['QTD COR'] || 0);
-        setores[setor] = (setores[setor] || 0) + total;
-      });
+      // Remover gráfico antigo se existir
+      if (window.graficoUso) {
+        window.graficoUso.destroy();
+      }
 
-      const labels = Object.keys(setores);
-      const valores = Object.values(setores);
+      const labels = [];
+      const dados = [];
 
-      new Chart(ctx, {
+      for (const [setor, info] of Object.entries(setores)) {
+        labels.push(setor);
+        dados.push(info.total);
+      }
+
+      window.graficoUso = new Chart(ctx, {
         type: 'bar',
         data: {
           labels: labels,
           datasets: [{
-            label: 'Total de Impressões por Setor',
-            data: valores,
+            label: 'Total de Impressões (QTD PRETO + QTD COR)',
+            data: dados,
             backgroundColor: '#007BFF'
           }]
         },
@@ -188,6 +201,11 @@
             },
             legend: {
               display: false
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true
             }
           }
         }
