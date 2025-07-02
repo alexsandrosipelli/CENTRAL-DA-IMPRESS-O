@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Estudo de Uso de Impressoras</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+      color: #333;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    header h1 {
+      color: #007BFF;
+    }
+
+    section {
+      max-width: 1000px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 0 12px rgba(0, 0, 0, 0.1);
+    }
+
+    input[type="file"] {
+      margin: 20px 0;
+    }
+
+    button {
+      padding: 10px 20px;
+      background: #007BFF;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-bottom: 20px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+
+    th, td {
+      padding: 10px;
+      border-bottom: 1px solid #ccc;
+      text-align: left;
+    }
+
+    th {
+      background: #007BFF;
+      color: white;
+    }
+
+    canvas {
+      margin-top: 40px;
+    }
+
+    #resumo {
+      background: #e9f7ef;
+      padding: 20px;
+      margin-top: 30px;
+      border-left: 5px solid #28a745;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Estudo de Padrões de Uso das Impressoras</h1>
+    <p>Envie um arquivo CSV para análise diária das impressoras da unidade</p>
+  </header>
+
+  <section>
+    <input type="file" id="csvFile" accept=".csv">
+    <br>
+    <button onclick="analisarPadraoUso()">📊 Analisar</button>
+
+    <div id="resumo"></div>
+    <canvas id="graficoUso"></canvas>
+  </section>
+
+  <script>
+    function analisarPadraoUso() {
+      const file = document.getElementById('csvFile').files[0];
+      if (!file) {
+        alert('Selecione um arquivo CSV');
+        return;
+      }
+
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: function(results) {
+          const data = results.data;
+          gerarResumo(data);
+          gerarGrafico(data);
+        }
+      });
+    }
+
+    function gerarResumo(data) {
+      let totalImpressoes = 0;
+      let impressoras = {};
+      let tonerBaixo = 0;
+
+      data.forEach(row => {
+        const serial = row['Serial Number'];
+        const mono = parseInt(row['Mono Lifetime Count'] || 0);
+        const color = parseInt(row['Color Lifetime Count'] || 0);
+        const black = parseInt(row['Black (%)'] || 100);
+
+        if (!impressoras[serial]) {
+          impressoras[serial] = { total: 0, toner: black };
+        }
+
+        impressoras[serial].total += mono + color;
+        if (black < 20) tonerBaixo++;
+        totalImpressoes += mono + color;
+      });
+
+      let media = (totalImpressoes / Object.keys(impressoras).length).toFixed(2);
+      let maisUsada = Object.entries(impressoras).sort((a, b) => b[1].total - a[1].total)[0];
+      let menosUsada = Object.entries(impressoras).sort((a, b) => a[1].total - b[1].total)[0];
+
+      const resumo = `
+        <h3>Resumo Geral:</h3>
+        <ul>
+          <li><strong>Impressoras analisadas:</strong> ${Object.keys(impressoras).length}</li>
+          <li><strong>Total de impressões:</strong> ${totalImpressoes}</li>
+          <li><strong>Média por impressora:</strong> ${media}</li>
+          <li><strong>Mais usada:</strong> ${maisUsada[0]} (${maisUsada[1].total} páginas)</li>
+          <li><strong>Menos usada:</strong> ${menosUsada[0]} (${menosUsada[1].total} páginas)</li>
+          <li><strong>Impressoras com toner abaixo de 20%:</strong> ${tonerBaixo}</li>
+        </ul>
+      `;
+      document.getElementById('resumo').innerHTML = resumo;
+    }
+
+    function gerarGrafico(data) {
+      const ctx = document.getElementById('graficoUso').getContext('2d');
+
+      const labels = [];
+      const valores = [];
+
+      data.forEach(row => {
+        const serial = row['Serial Number'];
+        const mono = parseInt(row['Mono Lifetime Count'] || 0);
+        const color = parseInt(row['Color Lifetime Count'] || 0);
+        labels.push(serial);
+        valores.push(mono + color);
+      });
+
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Total de Impressões',
+            data: valores,
+            backgroundColor: '#007BFF'
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            title: {
+              display: true,
+              text: 'Volume de Impressão por Impressora'
+            },
+            legend: {
+              display: false
+            }
+          }
+        }
+      });
+    }
+  </script>
+</body>
+</html>
