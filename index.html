@@ -3,14 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Estudo de Padrões de Uso das Impressoras - Excel</title>
+  <title>Relatório Executivo de Uso de Impressoras</title>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <style>
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
     body {
       font-family: 'Poppins', sans-serif;
       background: #f5f5f5;
@@ -26,41 +24,25 @@
     }
     section {
       max-width: 1000px;
-      margin: 0 auto;
+      margin: 0 auto 40px auto;
       background: #fff;
       padding: 30px;
       border-radius: 12px;
       box-shadow: 0 0 12px rgba(0, 0, 0, 0.1);
     }
-    input[type="file"] {
-      margin: 20px 0;
+    input, select, button {
+      padding: 10px;
+      margin: 10px 0;
+      font-size: 16px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
     }
     button {
-      padding: 10px 20px;
       background: #007BFF;
       color: white;
       border: none;
-      border-radius: 6px;
-      font-weight: bold;
       cursor: pointer;
-      margin-bottom: 20px;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 20px;
-    }
-    th, td {
-      padding: 10px;
-      border-bottom: 1px solid #ccc;
-      text-align: left;
-    }
-    th {
-      background: #007BFF;
-      color: white;
-    }
-    canvas {
-      margin-top: 40px;
+      font-weight: 600;
     }
     #resumo {
       background: #e9f7ef;
@@ -68,149 +50,300 @@
       margin-top: 30px;
       border-left: 5px solid #28a745;
     }
+    canvas {
+      margin-top: 30px;
+      max-width: 100%;
+    }
   </style>
 </head>
 <body>
+
   <header>
-    <h1>Estudo de Padrões de Uso das Impressoras (Excel)</h1>
-    <p>Envie um arquivo Excel (.xlsx) para análise diária das impressoras da unidade</p>
+    <h1>Relatório Executivo Mensal - Uso de Impressoras</h1>
+    <p>Carregue seu arquivo Excel com dados diários para gerar análises mensais.</p>
   </header>
 
   <section>
     <input type="file" id="excelFile" accept=".xlsx" />
     <br />
-    <button onclick="analisarExcel()">📊 Analisar</button>
+    <button onclick="carregarExcel()">Carregar Dados</button>
+
+    <br />
+    <label for="mesAno">Selecione mês para análise:</label>
+    <select id="mesAno" onchange="exibirRelatorio()"></select>
 
     <div id="resumo"></div>
-    <canvas id="graficoUso"></canvas>
+
+    <canvas id="graficoBarras"></canvas>
+    <canvas id="graficoLinha"></canvas>
+    <canvas id="graficoRadar"></canvas>
+    <canvas id="graficoPizza"></canvas>
+    <canvas id="graficoDifMedia"></canvas>
   </section>
 
-  <script>
-    function analisarExcel() {
-      const input = document.getElementById('excelFile');
-      if (!input.files.length) {
-        alert('Selecione um arquivo Excel (.xlsx)');
+<script>
+  let dadosAgrupadosPorMes = {}; // { '2025-05': { setor1: {...}, setor2: {...} }, ... }
+  let mesesDisponiveis = [];
+
+  function carregarExcel() {
+    const input = document.getElementById('excelFile');
+    if (!input.files.length) {
+      alert('Selecione um arquivo Excel (.xlsx)');
+      return;
+    }
+    const file = input.files[0];
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+
+      if (jsonData.length === 0) {
+        alert('Arquivo vazio ou inválido');
         return;
       }
-      const file = input.files[0];
-      const reader = new FileReader();
 
-      reader.onload = (e) => {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
+      agruparDados(jsonData);
+      preencherSelectMes();
+      exibirRelatorio();
+    };
 
-        // Assume primeira aba
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+    reader.readAsArrayBuffer(file);
+  }
 
-        if (jsonData.length === 0) {
-          alert('Arquivo vazio ou inválido');
-          return;
-        }
+  // Função para extrair mês e ano no formato yyyy-mm
+  function extrairMesAno(dataStr) {
+    // Considera que data vem como "dd/mm/yyyy"
+    const partes = dataStr.split('/');
+    if (partes.length !== 3) return null;
+    return `${partes[2]}-${partes[1].padStart(2, '0')}`;
+  }
 
-        processarDados(jsonData);
-      };
+  function agruparDados(data) {
+    dadosAgrupadosPorMes = {};
+    mesesDisponiveis = new Set();
 
-      reader.readAsArrayBuffer(file);
-    }
+    data.forEach(row => {
+      const dataRaw = row['data'] || row['Data'] || '';
+      const mesAno = extrairMesAno(dataRaw);
+      if (!mesAno) return;
 
-    function processarDados(data) {
-      let totalImpressao = 0;
-      let setores = {};
-      let tonerBaixoCount = 0;
+      const setor = row['setor'] || row['Setor'] || 'Indefinido';
+      const tonerStr = row['TONER'] || row['Toner'] || '0%';
+      const qtdPreto = parseInt(row['QTD PRETO'] || row['Qtd Preto'] || 0);
+      const qtdCor = parseInt(row['QTD COR'] || row['Qtd Cor'] || 0);
+      const diferencaDiaria = parseFloat(row['DIFERENCIA DIARIA'] || row['Diferencia Diaria'] || 0);
 
-      // Colunas esperadas: data, setor, TONER, Magenta (%), Yellow (%), Cyan (%), UNIDADE DE IMAGEM, FUSOR, QTD PRETO, QTD COR, DIFERENCIA DIARIA
+      const toner = parseInt(tonerStr.toString().replace('%', '').trim()) || 0;
 
-      data.forEach(row => {
-        const setor = row['setor'] || row['Setor'] || '';
-        const tonerStr = row['TONER'] || row['Toner'] || '0%';
-        const qtdPreto = parseInt(row['QTD PRETO'] || row['Qtd Preto'] || 0);
-        const qtdCor = parseInt(row['QTD COR'] || row['Qtd Cor'] || 0);
-
-        // Converter toner para número (ex: "13%" -> 13)
-        const toner = parseInt(tonerStr.toString().replace('%', '').trim()) || 0;
-
-        if (!setores[setor]) {
-          setores[setor] = { total: 0, tonerValues: [] };
-        }
-        setores[setor].total += qtdPreto + qtdCor;
-        setores[setor].tonerValues.push(toner);
-
-        totalImpressao += qtdPreto + qtdCor;
-        if (toner < 20) tonerBaixoCount++;
-      });
-
-      const numSetores = Object.keys(setores).length;
-      const media = (totalImpressao / numSetores).toFixed(2);
-
-      // Encontrar setor mais e menos usado
-      const setoresOrdenados = Object.entries(setores).sort((a, b) => b[1].total - a[1].total);
-      const maisUsado = setoresOrdenados[0];
-      const menosUsado = setoresOrdenados[setoresOrdenados.length - 1];
-
-      // Exibir resumo
-      const resumoHTML = `
-        <h3>Resumo Geral:</h3>
-        <ul>
-          <li><strong>Setores analisados:</strong> ${numSetores}</li>
-          <li><strong>Total de impressões:</strong> ${totalImpressao}</li>
-          <li><strong>Média por setor:</strong> ${media}</li>
-          <li><strong>Mais usado:</strong> ${maisUsado[0]} (${maisUsado[1].total} páginas)</li>
-          <li><strong>Menos usado:</strong> ${menosUsado[0]} (${menosUsado[1].total} páginas)</li>
-          <li><strong>Registros com toner abaixo de 20%:</strong> ${tonerBaixoCount}</li>
-        </ul>
-      `;
-      document.getElementById('resumo').innerHTML = resumoHTML;
-
-      gerarGrafico(setores);
-    }
-
-    function gerarGrafico(setores) {
-      const ctx = document.getElementById('graficoUso').getContext('2d');
-
-      // Remover gráfico antigo se existir
-      if (window.graficoUso) {
-        window.graficoUso.destroy();
+      if (!dadosAgrupadosPorMes[mesAno]) {
+        dadosAgrupadosPorMes[mesAno] = {};
+      }
+      if (!dadosAgrupadosPorMes[mesAno][setor]) {
+        dadosAgrupadosPorMes[mesAno][setor] = {
+          totalImpressao: 0,
+          registros: 0,
+          tonerValues: [],
+          registrosTonerBaixo: 0,
+          somaDiferencaDiaria: 0
+        };
       }
 
-      const labels = [];
-      const dados = [];
+      const setorData = dadosAgrupadosPorMes[mesAno][setor];
+      setorData.totalImpressao += qtdPreto + qtdCor;
+      setorData.registros++;
+      setorData.tonerValues.push(toner);
+      setorData.somaDiferencaDiaria += diferencaDiaria;
+      if (toner < 20) setorData.registrosTonerBaixo++;
 
-      for (const [setor, info] of Object.entries(setores)) {
-        labels.push(setor);
-        dados.push(info.total);
+      mesesDisponiveis.add(mesAno);
+    });
+
+    mesesDisponiveis = Array.from(mesesDisponiveis).sort();
+  }
+
+  function preencherSelectMes() {
+    const select = document.getElementById('mesAno');
+    select.innerHTML = '';
+    mesesDisponiveis.forEach(mes => {
+      const opt = document.createElement('option');
+      const [ano, mesNum] = mes.split('-');
+      opt.value = mes;
+      opt.textContent = `${mesNum}/${ano}`;
+      select.appendChild(opt);
+    });
+  }
+
+  let chartBarras, chartLinha, chartRadar, chartPizza, chartDifMedia;
+
+  function exibirRelatorio() {
+    const select = document.getElementById('mesAno');
+    if (!select.value) return;
+
+    const mesSelecionado = select.value;
+    const dadosSetores = dadosAgrupadosPorMes[mesSelecionado];
+    if (!dadosSetores) return;
+
+    // KPIs gerais
+    const totalImpressaoMes = Object.values(dadosSetores).reduce((acc, cur) => acc + cur.totalImpressao, 0);
+    const totalRegistrosMes = Object.values(dadosSetores).reduce((acc, cur) => acc + cur.registros, 0);
+    const mediaDiariaMes = (totalImpressaoMes / totalRegistrosMes).toFixed(2);
+
+    // Toner baixo global no mês
+    const totalTonerBaixo = Object.values(dadosSetores).reduce((acc, cur) => acc + cur.registrosTonerBaixo, 0);
+
+    // Setores para gráficos
+    const setores = Object.keys(dadosSetores);
+    const totalImpressaoPorSetor = setores.map(s => dadosSetores[s].totalImpressao);
+    const mediaTonerPorSetor = setores.map(s => {
+      const vals = dadosSetores[s].tonerValues;
+      const soma = vals.reduce((a,b) => a+b, 0);
+      return (soma / vals.length).toFixed(2);
+    });
+    const minTonerPorSetor = setores.map(s => Math.min(...dadosSetores[s].tonerValues));
+    const maxTonerPorSetor = setores.map(s => Math.max(...dadosSetores[s].tonerValues));
+    const diffMediaPorSetor = setores.map(s => (dadosSetores[s].somaDiferencaDiaria / dadosSetores[s].registros).toFixed(2));
+    const percentualTonerBaixoPorSetor = setores.map(s => ((dadosSetores[s].registrosTonerBaixo / dadosSetores[s].registros)*100).toFixed(1));
+
+    // Resumo textual
+    const resumoHTML = `
+      <h3>Resumo do Mês: ${select.options[select.selectedIndex].text}</h3>
+      <ul>
+        <li><strong>Total de impressões no mês:</strong> ${totalImpressaoMes}</li>
+        <li><strong>Média diária de impressões:</strong> ${mediaDiariaMes}</li>
+        <li><strong>Registros com toner baixo (&lt;20%):</strong> ${totalTonerBaixo}</li>
+      </ul>
+    `;
+    document.getElementById('resumo').innerHTML = resumoHTML;
+
+    // Gráfico barras: Total impressão por setor
+    if(chartBarras) chartBarras.destroy();
+    const ctxBarras = document.getElementById('graficoBarras').getContext('2d');
+    chartBarras = new Chart(ctxBarras, {
+      type: 'bar',
+      data: {
+        labels: setores,
+        datasets: [{
+          label: 'Total de Impressões',
+          data: totalImpressaoPorSetor,
+          backgroundColor: '#007BFF'
+        }]
+      },
+      options: {
+        plugins: { title: { display: true, text: 'Total de Impressões por Setor' }, legend: { display: false } },
+        responsive: true,
+        scales: { y: { beginAtZero: true } }
       }
+    });
 
-      window.graficoUso = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: labels,
-          datasets: [{
-            label: 'Total de Impressões (QTD PRETO + QTD COR)',
-            data: dados,
-            backgroundColor: '#007BFF'
-          }]
-        },
-        options: {
-          responsive: true,
-          plugins: {
-            title: {
-              display: true,
-              text: 'Volume de Impressão por Setor'
-            },
-            legend: {
-              display: false
-            }
+    // Gráfico linha: Evolução mensal - aqui só mostramos o mês atual pois não temos histórico acumulado. 
+    // Para histórico real, precisaria agregar dados de vários meses e exibir.
+    // Por ora mostramos média toner por setor.
+    if(chartLinha) chartLinha.destroy();
+    const ctxLinha = document.getElementById('graficoLinha').getContext('2d');
+    chartLinha = new Chart(ctxLinha, {
+      type: 'line',
+      data: {
+        labels: setores,
+        datasets: [{
+          label: 'Média TONER (%)',
+          data: mediaTonerPorSetor,
+          fill: false,
+          borderColor: '#28a745',
+          tension: 0.1
+        }]
+      },
+      options: {
+        plugins: { title: { display: true, text: 'Média de TONER (%) por Setor' }, legend: { display: true } },
+        responsive: true,
+        scales: { y: { beginAtZero: true, max: 100 } }
+      }
+    });
+
+    // Gráfico radar: Comparação Toner (min, média, max) por setor
+    if(chartRadar) chartRadar.destroy();
+    const ctxRadar = document.getElementById('graficoRadar').getContext('2d');
+    chartRadar = new Chart(ctxRadar, {
+      type: 'radar',
+      data: {
+        labels: setores,
+        datasets: [
+          {
+            label: 'Toner Min (%)',
+            data: minTonerPorSetor,
+            borderColor: '#dc3545',
+            backgroundColor: 'rgba(220,53,69,0.2)'
           },
-          scales: {
-            y: {
-              beginAtZero: true
-            }
+          {
+            label: 'Toner Média (%)',
+            data: mediaTonerPorSetor,
+            borderColor: '#ffc107',
+            backgroundColor: 'rgba(255,193,7,0.2)'
+          },
+          {
+            label: 'Toner Máx (%)',
+            data: maxTonerPorSetor,
+            borderColor: '#28a745',
+            backgroundColor: 'rgba(40,167,69,0.2)'
           }
+        ]
+      },
+      options: {
+        plugins: { title: { display: true, text: 'Comparação Toner (%) por Setor' } },
+        responsive: true,
+        scales: {
+          r: { min: 0, max: 100 }
         }
-      });
-    }
-  </script>
+      }
+    });
+
+    // Gráfico pizza: % registros toner baixo (média)
+    if(chartPizza) chartPizza.destroy();
+    const ctxPizza = document.getElementById('graficoPizza').getContext('2d');
+    chartPizza = new Chart(ctxPizza, {
+      type: 'pie',
+      data: {
+        labels: ['Toner abaixo de 20%', 'Toner acima de 20%'],
+        datasets: [{
+          data: [
+            totalTonerBaixo,
+            totalRegistrosMes - totalTonerBaixo
+          ],
+          backgroundColor: ['#dc3545', '#28a745']
+        }]
+      },
+      options: {
+        plugins: { title: { display: true, text: 'Percentual de Registros com Toner Baixo' } },
+        responsive: true
+      }
+    });
+
+    // Gráfico barras horizontais: Diferença diária média por setor
+    if(chartDifMedia) chartDifMedia.destroy();
+    const ctxDif = document.getElementById('graficoDifMedia').getContext('2d');
+    chartDifMedia = new Chart(ctxDif, {
+      type: 'bar',
+      data: {
+        labels: setores,
+        datasets: [{
+          label: 'Diferença Diária Média',
+          data: diffMediaPorSetor,
+          backgroundColor: '#17a2b8'
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        plugins: { title: { display: true, text: 'Diferença Diária Média por Setor' }, legend: { display: false } },
+        responsive: true,
+        scales: { x: { beginAtZero: true } }
+      }
+    });
+  }
+</script>
+
 </body>
 </html>
